@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"log"
+	"os"
 
 	"github.com/IBM/sarama"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/processor"
@@ -34,9 +35,33 @@ func Start(brokers, topic string) {
 	for {
 		select {
 		case msg := <-partitionConsumer.Messages():
-			processor.ProcessFIO(msg)
+			err := processor.ProcessFIO(msg)
+			if err != nil {
+				log.Printf("Ошибка обработки сообщения: %s\n", err)
+				sendToFailedTopic(brokers, msg.Value)
+			}
 		case err := <-partitionConsumer.Errors():
 			log.Printf("Ошибка: %s\n", err.Error())
 		}
 	}
+}
+
+func sendToFailedTopic(brokers string, msg []byte) {
+	producer, err := sarama.NewAsyncProducer([]string{brokers}, nil)
+	if err != nil {
+		log.Printf("Ошибка создания продюсера: %s\n", err)
+		return
+	}
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Printf("Ошибка закрытия продюсера: %s\n", err)
+		}
+	}()
+
+	failedMsg := &sarama.ProducerMessage{
+		Topic: os.Getenv("KAFKA_FAILED"),
+		Value: sarama.StringEncoder(msg),
+	}
+
+	producer.Input() <- failedMsg
 }
