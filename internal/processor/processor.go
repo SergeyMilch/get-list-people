@@ -7,6 +7,8 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/api"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 )
 
 type PersonInfo struct {
@@ -18,7 +20,7 @@ type PersonInfo struct {
 	Nationality string
 }
 
-func ProcessFIO(msg *sarama.ConsumerMessage) error {
+func ProcessFIO(msg *sarama.ConsumerMessage, db *sqlx.DB) error {
 	var data map[string]string
 	err := json.Unmarshal(msg.Value, &data)
 	if err != nil {
@@ -65,6 +67,11 @@ func ProcessFIO(msg *sarama.ConsumerMessage) error {
 	}
 
 	// TODO здесь запись в базу данных
+	_, err = db.NamedExec(`INSERT INTO people (name, surname, patronymic, age, gender, nationality)
+		VALUES (:name, :surname, :patronymic, :age, :gender, :nationality)`, personInfo)
+	if err != nil {
+		return fmt.Errorf("Ошибка записи в базу данных: %s", err)
+	}
 
 	fmt.Printf("Обработано: %+v\n", personInfo)
 

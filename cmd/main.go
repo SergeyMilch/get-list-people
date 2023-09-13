@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/consumer"
+	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 )
 
@@ -18,5 +19,11 @@ func main() {
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaTopic := os.Getenv("KAFKA_TOPIC")
 
-	consumer.Start(kafkaBrokers, kafkaTopic)
+	db, err := sqlx.Connect("postgres", os.Getenv("DB_URL"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	consumer.Start(kafkaBrokers, kafkaTopic, db)
 }

@@ -6,9 +6,10 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/processor"
+	"github.com/jmoiron/sqlx"
 )
 
-func Start(brokers, topic string) {
+func Start(brokers, topic string, db *sqlx.DB) {
 	config := sarama.NewConfig()
 	config.Consumer.Return.Errors = true
 
@@ -35,7 +36,7 @@ func Start(brokers, topic string) {
 	for {
 		select {
 		case msg := <-partitionConsumer.Messages():
-			err := processor.ProcessFIO(msg)
+			err := processor.ProcessFIO(msg, db)
 			if err != nil {
 				log.Printf("Ошибка обработки сообщения: %s\n", err)
 				sendToFailedTopic(brokers, msg.Value)
