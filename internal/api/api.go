@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func GetAge(name string) (int, error) {
+func GetAge(name string) (uint8, error) {
 	url := fmt.Sprintf("https://api.agify.io/?name=%s", name)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -20,7 +20,7 @@ func GetAge(name string) (int, error) {
 		return 0, err
 	}
 
-	age := int(data["age"].(int))
+	age := uint8(data["age"].(float64))
 	return age, nil
 }
 

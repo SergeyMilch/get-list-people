@@ -13,7 +13,7 @@ type PersonInfo struct {
 	Name        string
 	Surname     string
 	Patronymic  string
-	Age         int
+	Age         uint8
 	Gender      string
 	Nationality string
 }
