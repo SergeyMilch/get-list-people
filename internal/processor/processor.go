@@ -8,7 +8,6 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/api"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
 )
 
 type PersonInfo struct {
@@ -67,7 +66,7 @@ func ProcessFIO(msg *sarama.ConsumerMessage, db *sqlx.DB) error {
 	}
 
 	// TODO здесь запись в базу данных
-	_, err = db.NamedExec(`INSERT INTO people (name, surname, patronymic, age, gender, nationality)
+	_, err = db.NamedExec(`INSERT INTO people (user_name, surname, patronymic, age, gender, nationality)
 		VALUES (:name, :surname, :patronymic, :age, :gender, :nationality)`, personInfo)
 	if err != nil {
 		return fmt.Errorf("Ошибка записи в базу данных: %s", err)
