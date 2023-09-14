@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/consumer"
-	"github.com/golang-migrate/migrate/v4"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/router"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
@@ -23,28 +25,26 @@ func main() {
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	kafkaTopic := os.Getenv("KAFKA_TOPIC")
 
-	db, err := sqlx.Connect("postgres", os.Getenv("DB_URL"))
+	dbConn, err := sqlx.Connect("postgres", os.Getenv("DB_URL"))
 	if err != nil {
+		fmt.Println("Error5")
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer dbConn.Close()
 
-	err = execMigrations(db)
+	err = db.ExecMigrations(dbConn)
 	if err != nil {
+		fmt.Println("Error3")
 		log.Fatal(err)
 	}
 
-	consumer.Start(kafkaBrokers, kafkaTopic, db)
-}
+	r := router.NewRouter(dbConn)
 
-func execMigrations(db *sqlx.DB) error {
-	m, err := migrate.New("file://migrations", os.Getenv("DB_URL"))
+	err = r.Run(":8080")
 	if err != nil {
+		fmt.Println("Error4")
 		log.Fatal(err)
 	}
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatal(err)
-	}
-	return nil
+	consumer.Start(kafkaBrokers, kafkaTopic, dbConn)
 }

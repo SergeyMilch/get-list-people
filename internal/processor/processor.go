@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/IBM/sarama"
-	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/api"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/api"
 	"github.com/jmoiron/sqlx"
 )
 
