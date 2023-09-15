@@ -45,6 +45,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/golang-migrate/migrate/v4 v4.16.2
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/graphql-go/graphql v0.8.1
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect

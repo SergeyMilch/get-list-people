@@ -8,6 +8,10 @@ import (
 
 func NewRouter(db *sqlx.DB) *gin.Engine {
 	router := gin.Default()
+	router.Use(func(c *gin.Context) {
+		c.Set("db", db) // "db" в контекст (для GraphQL)
+		c.Next()
+	})
 	handler.SetupRoutes(router, db)
 	return router
 }

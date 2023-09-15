@@ -11,4 +11,6 @@ func SetupRoutes(router *gin.Engine, db *sqlx.DB) {
 	router.POST("/people", api.AddPerson(db))
 	router.DELETE("/people/:id", api.DeletePerson(db))
 	router.PUT("/people/:id", api.UpdatePerson(db))
+
+	router.POST("/graphql", api.HandleGraphQL(db))
 }

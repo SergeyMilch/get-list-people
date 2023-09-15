@@ -40,7 +40,7 @@ func main() {
 
 	r := router.NewRouter(dbConn)
 
-	err = r.Run(":8080")
+	err = r.Run(":8000")
 	if err != nil {
 		fmt.Println("Error4")
 		log.Fatal(err)
