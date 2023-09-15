@@ -1,7 +1,13 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
+	"strconv"
+	"time"
+
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -15,10 +21,29 @@ type Person struct {
 	Nationality string `db:"nationality" json:"nationality"`
 }
 
-func GetPeople(db *sqlx.DB) gin.HandlerFunc {
+func GetPeople(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := context.Background()
+		cacheKey := "all_people"
+
+		result, err := rdb.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var people []Person
+			json.Unmarshal([]byte(result), &people)
+			c.JSON(200, people)
+			return
+		}
+
 		var people []Person
-		err := db.Select(&people, "SELECT * FROM people")
+		err = db.Select(&people, "SELECT * FROM people")
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		jsonData, _ := json.Marshal(people)
+		err = rdb.Set(ctx, cacheKey, jsonData, time.Minute*10).Err()
+
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -28,7 +53,39 @@ func GetPeople(db *sqlx.DB) gin.HandlerFunc {
 	}
 }
 
-func AddPerson(db *sqlx.DB) gin.HandlerFunc {
+func GetPersonByID(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		cacheKey := "person_" + id
+
+		ctx := context.Background()
+		result, err := rdb.Get(ctx, cacheKey).Result()
+		if err == nil {
+			var person Person
+			json.Unmarshal([]byte(result), &person)
+			c.JSON(200, person)
+			return
+		}
+
+		var person Person
+		err = db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "Пользователь не найден"})
+			return
+		}
+
+		jsonData, _ := json.Marshal(person)
+		err = rdb.Set(ctx, cacheKey, jsonData, time.Minute*10).Err()
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, person)
+	}
+}
+
+func AddPerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var person Person
 		err := c.ShouldBindJSON(&person)
@@ -37,18 +94,48 @@ func AddPerson(db *sqlx.DB) gin.HandlerFunc {
 			return
 		}
 
-		_, err = db.Exec("INSERT INTO people (user_name, surname, patronymic, age, gender, nationality) VALUES ($1, $2, $3, $4, $5, $6)",
+		// Проверяем, существует ли пользователь с такими данными
+		existingUser := PersonModel{}
+		err = db.Get(&existingUser, "SELECT * FROM people WHERE user_name = $1 AND surname = $2 AND patronymic = $3 AND age = $4 AND gender = $5 AND nationality = $6", person.UserName, person.Surname, person.Patronymic, person.Age, person.Gender, person.Nationality)
+		if err == nil {
+			c.JSON(400, gin.H{"error": "Пользователь с такими данными уже существует"})
+			return
+		}
+
+		row := db.QueryRow("INSERT INTO people (user_name, surname, patronymic, age, gender, nationality) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
 			person.UserName, person.Surname, person.Patronymic, person.Age, person.Gender, person.Nationality)
+
+		var generatedID uint
+		err = row.Scan(&generatedID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
 
-		c.Status(200)
+		person.ID = generatedID
+
+		// Очищаем кэш для данного пользователя
+		ctx := context.Background()
+		cacheKey := "person_" + strconv.FormatUint(uint64(generatedID), 10)
+		err = rdb.Del(ctx, cacheKey).Err()
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"id":          generatedID,
+			"user_name":   person.UserName,
+			"surname":     person.Surname,
+			"patronymic":  person.Patronymic,
+			"age":         person.Age,
+			"gender":      person.Gender,
+			"nationality": person.Nationality,
+		})
 	}
 }
 
-func DeletePerson(db *sqlx.DB) gin.HandlerFunc {
+func DeletePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -58,11 +145,20 @@ func DeletePerson(db *sqlx.DB) gin.HandlerFunc {
 			return
 		}
 
+		// Очищаем кэш для данного пользователя
+		ctx := context.Background()
+		cacheKey := "person_" + id
+		err = rdb.Del(ctx, cacheKey).Err()
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
 		c.Status(200)
 	}
 }
 
-func UpdatePerson(db *sqlx.DB) gin.HandlerFunc {
+func UpdatePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -80,6 +176,23 @@ func UpdatePerson(db *sqlx.DB) gin.HandlerFunc {
 			return
 		}
 
-		c.Status(200)
+		// Очищаем кэш для данного пользователя
+		ctx := context.Background()
+		cacheKey := "person_" + id
+		err = rdb.Del(ctx, cacheKey).Err()
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"id":          id,
+			"user_name":   person.UserName,
+			"surname":     person.Surname,
+			"patronymic":  person.Patronymic,
+			"age":         person.Age,
+			"gender":      person.Gender,
+			"nationality": person.Nationality,
+		})
 	}
 }

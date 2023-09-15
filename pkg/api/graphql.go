@@ -1,10 +1,14 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"github.com/graphql-go/graphql"
 	"github.com/jmoiron/sqlx"
 )
@@ -122,7 +126,6 @@ var mutationType = graphql.NewObject(
 		Name: "Mutation",
 		Fields: graphql.Fields{
 			// Создать нового пользователя
-			// Создать нового пользователя
 			"CreatePerson": &graphql.Field{
 				Type:        PersonType,
 				Description: "Создать нового пользователя",
@@ -163,7 +166,7 @@ var mutationType = graphql.NewObject(
 					existingUser := PersonModel{}
 					err := db.Get(&existingUser, "SELECT * FROM people WHERE user_name = $1 AND surname = $2 AND patronymic = $3 AND age = $4 AND gender = $5 AND nationality = $6", name, surname, patronymic, age, gender, nationality)
 					if err == nil {
-						return existingUser, nil
+						return nil, fmt.Errorf("Пользователь с такими данными уже существует")
 					}
 
 					newPerson := PersonModel{
@@ -221,6 +224,13 @@ var mutationType = graphql.NewObject(
 					db, ok := params.Context.Value("db").(*sqlx.DB)
 					if !ok {
 						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
+					}
+
+					// Очистить кэш
+					rdb, ok := params.Context.Value("rdb").(*redis.Client)
+					if ok {
+						cacheKey := fmt.Sprintf("GetPerson:%d", id)
+						rdb.Del(context.Background(), cacheKey)
 					}
 
 					name, nameOk := params.Args["user_name"].(string)
@@ -289,6 +299,13 @@ var mutationType = graphql.NewObject(
 						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
 					}
 
+					// Очистить кэш
+					rdb, ok := params.Context.Value("rdb").(*redis.Client)
+					if ok {
+						cacheKey := fmt.Sprintf("GetPerson:%d", id)
+						rdb.Del(context.Background(), cacheKey)
+					}
+
 					deleteQuery := "DELETE FROM people WHERE id = $1 RETURNING *"
 
 					var deletedPerson PersonModel
@@ -305,7 +322,7 @@ var mutationType = graphql.NewObject(
 )
 
 // Функция для обработки запросов GraphQL
-func HandleGraphQL(db *sqlx.DB) gin.HandlerFunc {
+func HandleGraphQL(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var requestBody struct {
 			Query string `json:"query"`
@@ -332,5 +349,72 @@ func HandleGraphQL(db *sqlx.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, result)
+	}
+}
+
+// Получение человека по ID с кэшированием
+func GetPersonWithCache(db *sqlx.DB, rdb *redis.Client) graphql.FieldResolveFn {
+	return func(params graphql.ResolveParams) (interface{}, error) {
+		id, ok := params.Args["id"].(int)
+		if !ok {
+			return nil, fmt.Errorf("Неверное значение ID")
+		}
+
+		cacheKey := fmt.Sprintf("GetPerson:%d", id)
+
+		// Получить результат из Redis кэша
+		cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
+		if err == nil {
+			var person PersonModel
+			json.Unmarshal([]byte(cacheResult), &person)
+			return person, nil
+		}
+
+		person := PersonModel{}
+		err = db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
+		if err != nil {
+			return nil, err
+		}
+
+		// Кэширование результата в Redis
+		jsonData, _ := json.Marshal(person)
+		err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
+
+		if err != nil {
+			return nil, err
+		}
+
+		return person, nil
+	}
+}
+
+// Получение всех пользователей с кэшированием
+func AllPeopleWithCache(db *sqlx.DB, rdb *redis.Client) graphql.FieldResolveFn {
+	return func(params graphql.ResolveParams) (interface{}, error) {
+		cacheKey := "AllPeople"
+
+		// Получить результат из Redis кэша
+		cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
+		if err == nil {
+			var people []PersonModel
+			json.Unmarshal([]byte(cacheResult), &people)
+			return people, nil
+		}
+
+		var allPeople []PersonModel
+		err = db.Select(&allPeople, "SELECT * FROM people")
+		if err != nil {
+			return nil, err
+		}
+
+		// Кэширование результата в Redis
+		jsonData, _ := json.Marshal(allPeople)
+		err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
+
+		if err != nil {
+			return nil, err
+		}
+
+		return allPeople, nil
 	}
 }
