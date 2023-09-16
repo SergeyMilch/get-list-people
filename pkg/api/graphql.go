@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/graphql-go/graphql"
@@ -77,20 +79,33 @@ var queryType = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					// Получаем значение ID из запроса
 					id, ok := params.Args["id"].(int)
 					if !ok {
 						return nil, fmt.Errorf("Неверное значение ID")
 					}
 
-					db, ok := params.Context.Value("db").(*sqlx.DB)
-					if !ok {
-						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
+					cacheKey := fmt.Sprintf("GetPerson:%d", id)
+
+					rdb, _ := params.Context.Value("rdb").(*redis.Client)
+
+					// Получить результат из Redis кэша
+					cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
+					if err == nil {
+						var person PersonModel
+						json.Unmarshal([]byte(cacheResult), &person)
+						return person, nil
 					}
 
-					query := "SELECT * FROM people WHERE id = $1"
 					person := PersonModel{}
-					err := db.Get(&person, query, id)
+					err = db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
+					if err != nil {
+						return nil, err
+					}
+
+					// Кэширование результата в Redis
+					jsonData, _ := json.Marshal(person)
+					err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
+
 					if err != nil {
 						return nil, err
 					}
@@ -103,13 +118,28 @@ var queryType = graphql.NewObject(
 				Type:        graphql.NewList(PersonType),
 				Description: "Получить всех пользователей",
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					db, ok := params.Context.Value("db").(*sqlx.DB)
-					if !ok {
-						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
+					cacheKey := "AllPeople"
+
+					rdb, _ := params.Context.Value("rdb").(*redis.Client)
+
+					// Получить результат из Redis кэша
+					cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
+					if err == nil {
+						var people []PersonModel
+						json.Unmarshal([]byte(cacheResult), &people)
+						return people, nil
 					}
 
 					var allPeople []PersonModel
-					err := db.Select(&allPeople, "SELECT * FROM people")
+					err = db.Select(&allPeople, "SELECT * FROM people")
+					if err != nil {
+						return nil, err
+					}
+
+					// Кэширование результата в Redis
+					jsonData, _ := json.Marshal(allPeople)
+					err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
+
 					if err != nil {
 						return nil, err
 					}
@@ -240,41 +270,46 @@ var mutationType = graphql.NewObject(
 					gender, genderOk := params.Args["gender"].(string)
 					nationality, nationalityOk := params.Args["nationality"].(string)
 
-					updateQuery := "UPDATE people SET "
-					values := []interface{}{id}
+					var updateQuery strings.Builder
+					var values []interface{}
+					values = append(values, id)
 
 					if nameOk {
-						updateQuery += "user_name = ?, "
+						updateQuery.WriteString("user_name = ?, ")
 						values = append(values, name)
 					}
 					if surnameOk {
-						updateQuery += "surname = ?, "
+						updateQuery.WriteString("surname = ?, ")
 						values = append(values, surname)
 					}
 					if patronymicOk {
-						updateQuery += "patronymic = ?, "
+						updateQuery.WriteString("patronymic = ?, ")
 						values = append(values, patronymic)
 					}
 					if ageOk {
-						updateQuery += "age = ?, "
+						updateQuery.WriteString("age = ?, ")
 						values = append(values, age)
 					}
 					if genderOk {
-						updateQuery += "gender = ?, "
+						updateQuery.WriteString("gender = ?, ")
 						values = append(values, gender)
 					}
 					if nationalityOk {
-						updateQuery += "nationality = ?, "
+						updateQuery.WriteString("nationality = ?, ")
 						values = append(values, nationality)
 					}
 
-					// Убираем последнюю запятую и пробел
-					updateQuery = updateQuery[:len(updateQuery)-2]
+					if updateQuery.Len() == 0 {
+						return nil, fmt.Errorf("Нет данных для обновления")
+					}
 
-					updateQuery += " WHERE id = ? RETURNING *"
+					// Убираем последнюю запятую и пробел
+					updateQueryString := strings.TrimSuffix(updateQuery.String(), ", ")
+
+					updateQueryString += " WHERE id = ? RETURNING *"
 
 					var updatedPerson PersonModel
-					err := db.Get(&updatedPerson, updateQuery, values...)
+					err := db.Get(&updatedPerson, updateQueryString, values...)
 					if err != nil {
 						return nil, err
 					}
@@ -329,6 +364,7 @@ func HandleGraphQL(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		if err := c.ShouldBindJSON(&requestBody); err != nil {
+			logger.Error("Ошибка при разборе JSON запроса:")
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -344,77 +380,11 @@ func HandleGraphQL(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 
 		result := graphql.Do(params)
 		if len(result.Errors) > 0 {
+			logger.Error("Ошибка в GraphQL запросе:")
 			c.JSON(http.StatusBadRequest, gin.H{"errors": result.Errors})
 			return
 		}
 
 		c.JSON(http.StatusOK, result)
-	}
-}
-
-// Получение человека по ID с кэшированием
-func GetPersonWithCache(db *sqlx.DB, rdb *redis.Client) graphql.FieldResolveFn {
-	return func(params graphql.ResolveParams) (interface{}, error) {
-		id, ok := params.Args["id"].(int)
-		if !ok {
-			return nil, fmt.Errorf("Неверное значение ID")
-		}
-
-		cacheKey := fmt.Sprintf("GetPerson:%d", id)
-
-		// Получить результат из Redis кэша
-		cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
-		if err == nil {
-			var person PersonModel
-			json.Unmarshal([]byte(cacheResult), &person)
-			return person, nil
-		}
-
-		person := PersonModel{}
-		err = db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
-		if err != nil {
-			return nil, err
-		}
-
-		// Кэширование результата в Redis
-		jsonData, _ := json.Marshal(person)
-		err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
-
-		if err != nil {
-			return nil, err
-		}
-
-		return person, nil
-	}
-}
-
-// Получение всех пользователей с кэшированием
-func AllPeopleWithCache(db *sqlx.DB, rdb *redis.Client) graphql.FieldResolveFn {
-	return func(params graphql.ResolveParams) (interface{}, error) {
-		cacheKey := "AllPeople"
-
-		// Получить результат из Redis кэша
-		cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
-		if err == nil {
-			var people []PersonModel
-			json.Unmarshal([]byte(cacheResult), &people)
-			return people, nil
-		}
-
-		var allPeople []PersonModel
-		err = db.Select(&allPeople, "SELECT * FROM people")
-		if err != nil {
-			return nil, err
-		}
-
-		// Кэширование результата в Redis
-		jsonData, _ := json.Marshal(allPeople)
-		err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
-
-		if err != nil {
-			return nil, err
-		}
-
-		return allPeople, nil
 	}
 }

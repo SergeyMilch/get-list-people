@@ -1,6 +1,8 @@
 package redisdb
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -15,10 +17,18 @@ func NewRedisClient() *redis.Client {
 	}
 
 	client := redis.NewClient(&redis.Options{
-		Addr:     os.Getenv("ADR_REDIS"),
+		Addr:     os.Getenv("ADDR_REDIS"),
 		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       redisDB,
 	})
+
+	// Проверка подключения к Redis
+	_, err = client.Ping(context.Background()).Result()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("rdbClient:", client)
 
 	return client
 }
