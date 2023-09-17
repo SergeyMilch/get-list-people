@@ -38,7 +38,7 @@ func GetPeople(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 		var people []Person
 		err = db.Select(&people, "SELECT * FROM people")
 		if err != nil {
-			logger.Error("Ошибка при получении пользователей из базы данных: " + err.Error())
+			logger.Error("Ошибка при получении пользователей из базы данных: ", err.Error())
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -72,7 +72,7 @@ func GetPersonByID(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 		var person Person
 		err = db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
 		if err != nil {
-			logger.Warn("Пользователь не найден: " + err.Error())
+			logger.Warn("Пользователь не найден: ", err.Error())
 			c.JSON(404, gin.H{"error": "Пользователь не найден"})
 			return
 		}
@@ -101,7 +101,7 @@ func AddPerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 		existingUser := PersonModel{}
 		err = db.Get(&existingUser, "SELECT * FROM people WHERE user_name = $1 AND surname = $2 AND patronymic = $3 AND age = $4 AND gender = $5 AND nationality = $6", person.UserName, person.Surname, person.Patronymic, person.Age, person.Gender, person.Nationality)
 		if err == nil {
-			logger.Warn("Пользователь с такими данными уже существует")
+			logger.Warn("Пользователь с такими данными уже существует", err.Error())
 			c.JSON(400, gin.H{"error": err})
 			return
 		}
@@ -145,7 +145,7 @@ func DeletePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 
 		_, err := db.Exec("DELETE FROM people WHERE id = $1", id)
 		if err != nil {
-			logger.Error("Ошибка при удалении пользователя из базы: " + err.Error())
+			logger.Error("Ошибка при удалении пользователя из базы: ", err.Error())
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -177,7 +177,7 @@ func UpdatePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 		_, err = db.Exec("UPDATE people SET user_name=$1, surname=$2, patronymic=$3, age=$4, gender=$5, nationality=$6 WHERE id=$7",
 			person.UserName, person.Surname, person.Patronymic, person.Age, person.Gender, person.Nationality, id)
 		if err != nil {
-			logger.Error("Ошибка при обновлении пользователя в базе: " + err.Error())
+			logger.Error("Ошибка при обновлении пользователя в базе: ", err.Error())
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}

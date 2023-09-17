@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/logger"
 )
 
 func GetAge(name string) (uint8, error) {
 	url := fmt.Sprintf("https://api.agify.io/?name=%s", name)
 	resp, err := http.Get(url)
 	if err != nil {
+		logger.Error("Ошибка при запросе возраста:", err.Error())
 		return 0, err
 	}
 	defer resp.Body.Close()
@@ -17,6 +20,7 @@ func GetAge(name string) (uint8, error) {
 	var data map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
+		logger.Error("Ошибка при разборе JSON ответа:", err.Error())
 		return 0, err
 	}
 
@@ -28,6 +32,7 @@ func GetGender(name string) (string, error) {
 	url := fmt.Sprintf("https://api.genderize.io/?name=%s", name)
 	resp, err := http.Get(url)
 	if err != nil {
+		logger.Error("Ошибка при запросе пола:", err.Error())
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -35,6 +40,7 @@ func GetGender(name string) (string, error) {
 	var data map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
+		logger.Error("Ошибка при разборе JSON ответа:", err.Error())
 		return "", err
 	}
 
@@ -47,6 +53,7 @@ func GetGender(name string) (string, error) {
 func GetNationality(name string) (string, error) {
 	resp, err := http.Get(fmt.Sprintf("https://api.nationalize.io/?name=%s", name))
 	if err != nil {
+		logger.Error("Ошибка при запросе национальности:", err.Error())
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -54,12 +61,14 @@ func GetNationality(name string) (string, error) {
 	var data map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
+		logger.Error("Ошибка при разборе JSON ответа:", err.Error())
 		return "", err
 	}
 
 	countries, ok := data["country"].([]interface{})
 	if !ok || len(countries) == 0 {
-		return "", fmt.Errorf("Не удалось получить данные о странах")
+		logger.Error("Не удалось получить данные о странах", err.Error())
+		return "", err
 	}
 
 	var mostProbableCountryID string
@@ -68,25 +77,29 @@ func GetNationality(name string) (string, error) {
 	for _, country := range countries {
 		countryData, ok := country.(map[string]interface{})
 		if !ok {
-			return "", fmt.Errorf("Не удалось получить данные о стране")
+			logger.Error("Не удалось получить данные о стране", err.Error())
+			return "", err
 		}
 
 		probability, ok := countryData["probability"].(float64)
 		if !ok {
-			return "", fmt.Errorf("Не удалось получить вероятность")
+			logger.Error("Не удалось получить вероятность", err.Error())
+			return "", err
 		}
 
 		if probability > maxProbability {
 			maxProbability = probability
 			mostProbableCountryID, ok = countryData["country_id"].(string)
 			if !ok {
-				return "", fmt.Errorf("Не удалось получить ID страны")
+				logger.Error("Не удалось получить ID страны", err.Error())
+				return "", err
 			}
 		}
 	}
 
 	if mostProbableCountryID == "" {
-		return "", fmt.Errorf("Не удалось найти наиболее вероятную страну")
+		logger.Error("Не удалось найти наиболее вероятную страну", err.Error())
+		return "", err
 	}
 
 	return mostProbableCountryID, nil

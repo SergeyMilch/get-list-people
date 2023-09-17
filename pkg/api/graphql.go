@@ -25,8 +25,6 @@ type PersonModel struct {
 	Nationality string `db:"nationality" json:"nationality"`
 }
 
-var db *sqlx.DB
-
 // Определение типа PersonModel
 var PersonType = graphql.NewObject(
 	graphql.ObjectConfig{
@@ -84,20 +82,30 @@ var queryType = graphql.NewObject(
 						return nil, fmt.Errorf("Неверное значение ID")
 					}
 
-					cacheKey := fmt.Sprintf("GetPerson:%d", id)
+					cacheKey := fmt.Sprintf("GetPersonGraphQL:%d", id)
 
-					rdb, _ := params.Context.Value("rdb").(*redis.Client)
+					rdb, ok := params.Context.Value("rdb").(*redis.Client)
+					if !ok {
+						return nil, fmt.Errorf("Клиент Redis не найден в контексте")
+					}
 
-					// Получить результат из Redis кэша
-					cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
-					if err == nil {
-						var person PersonModel
-						json.Unmarshal([]byte(cacheResult), &person)
-						return person, nil
+					db, ok := params.Context.Value("db").(*sqlx.DB)
+					if !ok {
+						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
+					}
+
+					if cacheKey != "" {
+						// Получить результат из Redis кэша
+						cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
+						if err == nil {
+							var person PersonModel
+							json.Unmarshal([]byte(cacheResult), &person)
+							return person, nil
+						}
 					}
 
 					person := PersonModel{}
-					err = db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
+					err := db.Get(&person, "SELECT * FROM people WHERE id = $1", id)
 					if err != nil {
 						return nil, err
 					}
@@ -105,9 +113,8 @@ var queryType = graphql.NewObject(
 					// Кэширование результата в Redis
 					jsonData, _ := json.Marshal(person)
 					err = rdb.Set(context.Background(), cacheKey, jsonData, 24*time.Hour).Err()
-
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("Ошибка при кешировании в Redis: %s", err)
 					}
 
 					return person, nil
@@ -120,7 +127,15 @@ var queryType = graphql.NewObject(
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					cacheKey := "AllPeople"
 
-					rdb, _ := params.Context.Value("rdb").(*redis.Client)
+					rdb, ok := params.Context.Value("rdb").(*redis.Client)
+					if !ok {
+						return nil, fmt.Errorf("Клиент Redis не найден в контексте")
+					}
+
+					db, ok := params.Context.Value("db").(*sqlx.DB)
+					if !ok {
+						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
+					}
 
 					// Получить результат из Redis кэша
 					cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
@@ -259,7 +274,7 @@ var mutationType = graphql.NewObject(
 					// Очистить кэш
 					rdb, ok := params.Context.Value("rdb").(*redis.Client)
 					if ok {
-						cacheKey := fmt.Sprintf("GetPerson:%d", id)
+						cacheKey := fmt.Sprintf("GetPersonGraphQL:%d", id)
 						rdb.Del(context.Background(), cacheKey)
 					}
 
@@ -337,7 +352,7 @@ var mutationType = graphql.NewObject(
 					// Очистить кэш
 					rdb, ok := params.Context.Value("rdb").(*redis.Client)
 					if ok {
-						cacheKey := fmt.Sprintf("GetPerson:%d", id)
+						cacheKey := fmt.Sprintf("GetPersonGraphQL:%d", id)
 						rdb.Del(context.Background(), cacheKey)
 					}
 
@@ -364,7 +379,7 @@ func HandleGraphQL(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 		}
 
 		if err := c.ShouldBindJSON(&requestBody); err != nil {
-			logger.Error("Ошибка при разборе JSON запроса:")
+			logger.Error("Ошибка при разборе JSON запроса: ", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -380,7 +395,6 @@ func HandleGraphQL(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 
 		result := graphql.Do(params)
 		if len(result.Errors) > 0 {
-			logger.Error("Ошибка в GraphQL запросе:")
 			c.JSON(http.StatusBadRequest, gin.H{"errors": result.Errors})
 			return
 		}

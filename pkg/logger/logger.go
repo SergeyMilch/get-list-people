@@ -16,14 +16,20 @@ func Init() {
 	log.Level = logrus.DebugLevel
 }
 
-func Info(msg string) {
-	log.Info(msg)
+func Error(errMsg string, details string) {
+	log.WithFields(logrus.Fields{
+		"details": details,
+	}).Error(errMsg)
 }
 
-func Warn(msg string) {
-	log.Warn(msg)
+func Info(errMsg string, details string) {
+	log.WithFields(logrus.Fields{
+		"details": details,
+	}).Error(errMsg)
 }
 
-func Error(msg string) {
-	log.Error(msg)
+func Warn(errMsg string, details string) {
+	log.WithFields(logrus.Fields{
+		"details": details,
+	}).Error(errMsg)
 }
