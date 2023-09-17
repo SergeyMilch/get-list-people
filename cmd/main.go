@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 
@@ -54,14 +53,10 @@ func main() {
 	}
 
 	ctx := context.WithValue(context.Background(), dbKey, dbConn)
-	fmt.Println("ctxDB:", ctx)
+
 	ctx = context.WithValue(ctx, rdbKey, rdb)
 
-	fmt.Println("ctxRDB:", ctx)
-
 	r := router.NewRouter(ctx, dbConn, rdb)
-
-	fmt.Println("rdb:", rdb)
 
 	err = r.Run(":1234")
 	if err != nil {

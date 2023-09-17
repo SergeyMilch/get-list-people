@@ -84,6 +84,8 @@ var queryType = graphql.NewObject(
 
 					cacheKey := fmt.Sprintf("GetPersonGraphQL:%d", id)
 
+					// Можно сделать хеш, например: keyCache := MD5(cacheKey). Но, наверное, уникальное значение будет и так - cacheKey := fmt.Sprintf("GetPersonGraphQL:%d", id)
+
 					rdb, ok := params.Context.Value("rdb").(*redis.Client)
 					if !ok {
 						return nil, fmt.Errorf("Клиент Redis не найден в контексте")
@@ -94,9 +96,10 @@ var queryType = graphql.NewObject(
 						return nil, fmt.Errorf("Не удалось получить доступ к базе данных")
 					}
 
-					if cacheKey != "" {
+					if cacheKey != "" { // keyCache
+
 						// Получить результат из Redis кэша
-						cacheResult, err := rdb.Get(context.Background(), cacheKey).Result()
+						cacheResult, err := rdb.Get(context.Background(), cacheKey).Result() // keyCache
 						if err == nil {
 							var person PersonModel
 							json.Unmarshal([]byte(cacheResult), &person)
@@ -125,7 +128,8 @@ var queryType = graphql.NewObject(
 				Type:        graphql.NewList(PersonType),
 				Description: "Получить всех пользователей",
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					cacheKey := "AllPeople"
+
+					cacheKey := "AllPeopleGraphQL" // Можно сделать хеш, например: keyCache := MD5(cacheKey). Но, наверное, здесь не требуется уникального ключа
 
 					rdb, ok := params.Context.Value("rdb").(*redis.Client)
 					if !ok {

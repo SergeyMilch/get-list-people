@@ -2,7 +2,6 @@ package redisdb
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -27,8 +26,6 @@ func NewRedisClient() *redis.Client {
 	if err != nil {
 		panic(err)
 	}
-
-	fmt.Println("rdbClient:", client)
 
 	return client
 }

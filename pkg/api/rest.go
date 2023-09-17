@@ -58,7 +58,8 @@ func GetPeople(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 func GetPersonByID(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		cacheKey := "person_" + id
+
+		cacheKey := "person_" + id // Можно сделать хеш, например: keyCache := MD5(cacheKey)
 
 		ctx := context.Background()
 		result, err := rdb.Get(ctx, cacheKey).Result()
