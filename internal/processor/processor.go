@@ -6,8 +6,8 @@ import (
 	"log"
 
 	"github.com/IBM/sarama"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/api"
-	"github.com/jmoiron/sqlx"
 )
 
 type PersonInfo struct {
@@ -19,7 +19,7 @@ type PersonInfo struct {
 	Nationality string
 }
 
-func ProcessFIO(msg *sarama.ConsumerMessage, db *sqlx.DB) error {
+func ProcessFIO(msg *sarama.ConsumerMessage, db db.Database) error {
 	var data map[string]string
 	err := json.Unmarshal(msg.Value, &data)
 	if err != nil {
@@ -65,7 +65,7 @@ func ProcessFIO(msg *sarama.ConsumerMessage, db *sqlx.DB) error {
 		Nationality: nationality,
 	}
 
-	// TODO здесь запись в базу данных
+	// Запись в базу данных
 	_, err = db.NamedExec(`INSERT INTO people (user_name, surname, patronymic, age, gender, nationality)
 		VALUES (:name, :surname, :patronymic, :age, :gender, :nationality)`, personInfo)
 	if err != nil {

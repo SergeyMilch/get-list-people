@@ -52,9 +52,8 @@ func main() {
 		log.Fatal("Не удалось создать Redis-клиент")
 	}
 
-	ctx := context.WithValue(context.Background(), dbKey, dbConn)
-
-	ctx = context.WithValue(ctx, rdbKey, rdb)
+	ctx := context.WithValue(context.Background(), dbKey, db.NewDatabase(dbConn))
+	ctx = context.WithValue(ctx, rdbKey, redisdb.NewClientRedis(rdb))
 
 	r := router.NewRouter(ctx, dbConn, rdb)
 

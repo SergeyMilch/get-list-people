@@ -1,13 +1,13 @@
 package handler
 
 import (
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db/redisdb"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/api"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
-	"github.com/jmoiron/sqlx"
 )
 
-func SetupRoutes(router *gin.Engine, db *sqlx.DB, rdb *redis.Client) {
+func SetupRoutes(router *gin.Engine, db db.Database, rdb redisdb.RedisClient) {
 	router.GET("/people", api.GetPeople(db, rdb))
 	router.GET("/people/:id", api.GetPersonByID(db, rdb))
 	router.POST("/people", api.AddPerson(db, rdb))

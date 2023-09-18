@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db/redisdb"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -376,7 +378,7 @@ var mutationType = graphql.NewObject(
 )
 
 // Функция для обработки запросов GraphQL
-func HandleGraphQL(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+func HandleGraphQL(db db.Database, rdb redisdb.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var requestBody struct {
 			Query string `json:"query"`

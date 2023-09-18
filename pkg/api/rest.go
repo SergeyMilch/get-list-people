@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db"
+	"github.com/SergeyMilch/get-list-people-effective-mobile/internal/db/redisdb"
 	"github.com/SergeyMilch/get-list-people-effective-mobile/pkg/logger"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v8"
-	"github.com/jmoiron/sqlx"
 )
 
 type Person struct {
@@ -22,7 +22,7 @@ type Person struct {
 	Nationality string `db:"nationality" json:"nationality"`
 }
 
-func GetPeople(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+func GetPeople(db db.Database, rdb redisdb.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := context.Background()
 		cacheKey := "all_people"
@@ -55,7 +55,7 @@ func GetPeople(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	}
 }
 
-func GetPersonByID(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+func GetPersonByID(db db.Database, rdb redisdb.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -89,7 +89,7 @@ func GetPersonByID(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	}
 }
 
-func AddPerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+func AddPerson(db db.Database, rdb redisdb.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var person Person
 		err := c.ShouldBindJSON(&person)
@@ -140,7 +140,7 @@ func AddPerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	}
 }
 
-func DeletePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+func DeletePerson(db db.Database, rdb redisdb.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -164,7 +164,7 @@ func DeletePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
 	}
 }
 
-func UpdatePerson(db *sqlx.DB, rdb *redis.Client) gin.HandlerFunc {
+func UpdatePerson(db db.Database, rdb redisdb.RedisClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
