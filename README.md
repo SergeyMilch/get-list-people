@@ -26,11 +26,11 @@
 - go mod download
 
 Создайте файл .env в корневой директории проекта и заполните его значениями:
-POSTGRES_URL=postgres://user:password@localhost:5432/your_database?sslmode=disable&search_path=public
-REDIS_URL=localhost:6379
-KAFKA_BROKER_URL=localhost:9092
+DB_URL=postgres://user:password@localhost:5432/your_database?sslmode=disable&search_path=public
+KAFKA_BROKERS=localhost:9092
 KAFKA_TOPIC=NAME_TOPIC
 KAFKA_FAILED=NAME_TOPIC_FAILED
+ADDR_REDIS=localhost:6379
 REDIS_PASSWORD=password
 REDIS_DB=0
 
