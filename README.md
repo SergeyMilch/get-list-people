@@ -26,7 +26,7 @@
 - go mod download
 
 Создайте файл .env в корневой директории проекта и заполните его значениями:
-DB_URL=postgres://user:password@localhost:5432/your_database?sslmode=disable&search_path=public
+DB_URL=postgres://user:password@localhost:5432/your_database?sslmode=disable[&search_path=public]
 KAFKA_BROKERS=localhost:9092
 KAFKA_TOPIC=NAME_TOPIC
 KAFKA_FAILED=NAME_TOPIC_FAILED
